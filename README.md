@@ -1,6 +1,8 @@
 Efficient absorbing boundary conditions for conservation laws: Application to the piston problem of gas dynamics
 ===========================================================================
 Reproducibility repository for the paper **Efficient absorbing boundary conditions for conservation laws: Application to the piston problem of gas dynamics** by Carlos Muñoz-Moncayo
+![image](https://github.com/carlosmunozmoncayo/abcs-piston/assets/29715468/afc55443-2cd1-4df8-8cbb-f07984e4abb2)
+![image](https://github.com/carlosmunozmoncayo/abcs-piston/assets/29715468/df93afef-9752-4653-a76f-4275e2fc1c4c)
 
 ### Dependencies
   - python (v3.8.9)
