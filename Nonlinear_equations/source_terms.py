@@ -5,7 +5,7 @@ import numpy as np
 from scipy import optimize
 from scipy.integrate import solve_ivp
 import sys
-sys.path.append('./Fortran_source_terms/modules')
+sys.path.append('./NDO_source_Fortran/modules')
 import nonlinear_ABCs_module
 
 
@@ -439,7 +439,7 @@ def clawpack_source_step_nonlinear_far_field(solver,state,dt):
     #sigma_slowing = state.aux[0]
     sigma_damping = state.aux[1]
 
-    state.q = nonlinear_ABCs_module.heun_step(q=q, n=len(q[0]), gamma=gamma, dt=dt, sigma_damping_vec=sigma_damping)
+    state.q = nonlinear_ABCs_module.nonlinear_module.heun_step(q=q, n=len(q[0]), gamma=gamma, dt=dt, sigma_damping_vec=sigma_damping)
 #######################################
 #######################################
 
@@ -456,7 +456,7 @@ def sharpclaw_source_step_nonlinear_far_field(solver,state,dt):
     #sigma_slowing = state.aux[0]
     sigma_damping = state.aux[1]
 
-    dq = nonlinear_ABCs_module.rhs_2nd_order(q=q, n=len(q[0]), gamma=gamma, sigma_damping_vec=sigma_damping, x=xc)
+    dq = nonlinear_ABCs_module.nonlinear_module.rhs_2nd_order(q=q, n=len(q[0]), gamma=gamma, sigma_damping_vec=sigma_damping, x=xc)
     return dt*dq
 #######################################
 #######################################

@@ -9,6 +9,10 @@
 !Meant to be used with operator splitting
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+module nonlinear_module
+  implicit none
+contains
 subroutine Heun_step(q, n, gamma, dt, sigma_damping_vec, output)
     implicit none
     !Arguments
@@ -20,19 +24,6 @@ subroutine Heun_step(q, n, gamma, dt, sigma_damping_vec, output)
     
     !Local variables
     double precision :: q_tilde(3,n) !For time integration
-
-    !Define interface for rhs
-    interface
-        function rhs(qi, n, gamma, sigma_damping_vec)
-            implicit none
-            !Arguments
-            integer, intent(in)  :: n
-            double precision, intent(in) :: gamma
-            double precision, intent(in) :: qi(3, n)
-            double precision, intent(in) :: sigma_damping_vec(n)
-            double precision :: rhs(3, n)
-        end function rhs
-    end interface
     
     !Integrate q_t = rhs(q) with Heun's method
     q_tilde = q + dt*rhs(q, n, gamma, sigma_damping_vec)
@@ -101,17 +92,6 @@ function rhs(q, n, gamma, sigma_damping_vec)
     double precision :: suma(3)
     double precision :: avg_q(3)
 
-    !Define interface for construction of M(q)=R(q)D(q)R(q)^{-1}
-    interface
-        function construct_M(qi, gamma, sigma_damping)
-            implicit none
-            !Arguments
-            double precision :: gamma, sigma_damping
-            double precision :: qi(3)
-            double precision :: construct_M(3,3)
-        end function construct_M
-    end interface
-
     !Initialize sum and output
     suma = 0.d0
     rhs = 0.d0
@@ -156,30 +136,6 @@ subroutine rhs_2nd_order(q, n, gamma, sigma_damping_vec, x, output)
     double precision :: qSimpson(3,3) !Solution at Simpson points
     double precision :: avg_sigma_damping
 
-    !Define interface block
-    interface
-        function construct_M(qi, gamma, sigma_damping)
-            implicit none
-            !Arguments
-            double precision :: gamma, sigma_damping
-            double precision :: qi(3)
-            double precision :: construct_M(3,3)
-        end function construct_M
-
-        function eval_reconst_func(qi,xi,slopes,x)
-            implicit none
-            !Arguments
-            double precision, intent(in) :: qi(3), slopes(3), xi, x
-            double precision :: eval_reconst_func(3)
-        end function eval_reconst_func
-
-        function minmod_slope(q_slice, dx)
-            implicit none
-            !Arguments
-            double precision, intent(in) :: q_slice(3,3), dx
-            double precision :: minmod_slope(3)
-        end function minmod_slope
-    end interface
 
     !Initialize sum ,output, and solution at Simpson nodes
     qSimpson = 0.d0
@@ -245,15 +201,6 @@ function minmod_slope(q_slice, dx)
     double precision :: q_im1(3), q_i(3), q_ip1(3)
     integer :: k
 
-    !Define interface minmod
-    interface
-        function minmod(a,b)
-            implicit none
-            !Arguments
-            double precision, intent(in) :: a, b
-            double precision :: minmod
-        end function minmod
-    end interface
 
     q_im1 = q_slice(:,1)
     q_i = q_slice(:,2)
@@ -282,6 +229,8 @@ function minmod(a,b)
 end function minmod
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+end module nonlinear_module
     
 
 

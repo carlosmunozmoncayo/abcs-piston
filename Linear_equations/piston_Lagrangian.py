@@ -150,6 +150,8 @@ def setup(use_petsc=False,outdir='./_output',solver_type='sharpclaw',
                 solver.step_source = clawpack_source_step_relaxation_matrix
             else:
                 solver.step_source = clawpack_source_step_relaxation_scalar
+
+    solver.fwave=False
     
     
     #Number of equations and waves

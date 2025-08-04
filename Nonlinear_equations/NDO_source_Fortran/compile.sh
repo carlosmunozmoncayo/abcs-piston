@@ -12,13 +12,15 @@ do
     name=${name}_module
 
     #Compile the file
-    python3 -m numpy.f2py -c $file -m $name
+    python3 -m numpy.f2py -c $file -m $name --f90flags='-ffree-form'
 done
 
-#Clean the ../modules directory
-rm ../modules/*.so
-#Move each compiled file to the ../modules directory
-mv *.so ../modules
-
-#Change back to the directory with the Python scripts
 cd ..
+#Check if the modules directory exists, if not create it
+if [ ! -d "modules" ]; then
+    mkdir modules
+fi
+#Clean the ../modules directory
+rm modules/*.so
+#Move each compiled file to the modules directory
+mv src/*.so modules/
