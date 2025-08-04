@@ -17,10 +17,12 @@ do
     python3 -m numpy.f2py -c $file -m $name
 done
 
-#Clean the ../modules directory
-rm ../modules/*.so
-#Move each compiled file to the ../modules directory
-mv *.so ../modules
-
-#Change back to the directory with the Python scripts
 cd ..
+#Check if the modules directory exists, if not create it
+if [ ! -d "modules" ]; then
+    mkdir modules
+fi
+#Clean the ../modules directory
+rm modules/*.so
+#Move each compiled file to the ../modules directory
+mv src/*.so modules/

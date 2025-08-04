@@ -1,12 +1,7 @@
 #!/bin/bash
 
-#python3 -m numpy.f2py -c rp1_euler_HLL.f90 -m euler_HLL_1D
-#python3 -m numpy.f2py -c rp1_euler_HLL_slowing.f90 -m euler_HLL_slowing_1D
-#python3 -m numpy.f2py -c rp1_euler_HLL_slowing_damping.f90 -m euler_HLL_slowing_damping_1D
-#python3 -m numpy.f2py -c rp1_euler_burgers_HLL.f90 -m euler_burgers_HLL_1D
-
 #Change to the directory with the Fortran Riemann solvers
-cd ./src
+cd src
 
 #Iterate over all files in the directory
 for file in *.f90
@@ -22,10 +17,12 @@ do
     python3 -m numpy.f2py -c $file -m $name
 done
 
-#Clean the ../modules directory
-rm ../modules/*.so
-#Move each compiled file to the ../modules directory
-mv *.so ../modules
-
-#Change back to the directory with the Python scripts
 cd ..
+#Check if the modules directory exists, if not create it
+if [ ! -d "modules" ]; then
+    mkdir modules
+fi
+#Clean the ../modules directory
+rm modules/*.so
+#Move each compiled file to the ../modules directory
+mv src/*.so modules/
