@@ -22,6 +22,7 @@ from clawpack.riemann.euler_4wave_2D_constants import density, x_momentum, y_mom
         energy, num_eqn
 from clawpack.visclaw import colormaps
 import numpy as np
+import bcs_aux
 
 def setplot(plotdata):
     r"""Plotting settings
@@ -88,25 +89,48 @@ def setup(use_petsc=False,riemann_solver='roe',tfinal=2.0):
     solver.all_bcs = pyclaw.BC.wall
 
     domain = pyclaw.Domain([-2.,-2.],[2.,2.],[300,300])
-    solution = pyclaw.Solution(num_eqn,domain)
+    # solution = pyclaw.Solution(num_eqn,domain)
+    state = pyclaw.State(domain,num_eqn)
     gamma = 1.4
-    solution.problem_data['gamma']  = gamma
+    state.problem_data['gamma']  = gamma
 
     # Set initial data
     xx, yy = domain.grid.p_centers
     radius = ((xx)**2 + (yy)**2)**0.5
-    solution.q[density,...] = 1.
-    u = 0.0 
-    v = 0.0 
-    p = np.where(radius<0.2,5*solution.q[density,...],solution.q[density,...])
-    solution.q[x_momentum,...] = solution.q[density, ...] * u
-    solution.q[y_momentum,...] = solution.q[density, ...] * v
-    solution.q[energy,...] = 0.5 * solution.q[density,...]*(u**2 + v**2) + p / (gamma - 1.0)
+    state.q[density,...] = 1.
+    u = 0.0
+    v = 0.0
+    p = np.where(radius<0.2,5*state.q[density,...],state.q[density,...])
+    state.q[x_momentum,...] = state.q[density, ...] * u
+    state.q[y_momentum,...] = state.q[density, ...] * v
+    state.q[energy,...] = 0.5 * state.q[density,...]*(u**2 + v**2) + p / (gamma - 1.0)
+
+    
+    #####################################################################
+    #Set RM-based ABCs 
+    #####################################################################
+    xvec = xx[:,0]; yvec = yy[0,:]
+    (idx_lims, sponge_slices,
+      theta_slices, rel_funcs) = bcs_aux.setup_RM(xvec,yvec,[xvec[0],-1.8,1.8,xvec[-1]],
+                                                  [yvec[0],-1.8,1.8,yvec[-1]])
+    state.idx_lims = idx_lims
+    state.sponge_slices = sponge_slices
+    state.theta_slices = theta_slices
+    state.rel_funcs = rel_funcs
+    state.q_target = state.q[:,-1,-1].copy()  # Target state is state at the boundary at initial time
+    def b4step_RM(solver,state):
+        r"""
+        Function to be called before each time step to apply RM ABCs.
+        """
+        state.q = bcs_aux.apply_RM(state.q,state.rel_funcs,state.q_target,state.idx_lims)
+    solver.before_step = b4step_RM
+    #####################################################################
+
 
     claw = pyclaw.Controller()
     claw.tfinal = tfinal
     claw.num_output_times = 10
-    claw.solution = solution
+    claw.solution = pyclaw.Solution(state, domain)
     claw.solver = solver
 
     claw.output_format = 'ascii'    

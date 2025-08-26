@@ -29,7 +29,10 @@ def euclidean_distance(x1,y1,x2,y2):
     Compute the Euclidean distance between two points (x1,y1) and (x2,y2).
     """
     return np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
-
+#####################################################################
+# Rotation functions for vectors of conserved quantities
+# and matrices of eigenvectors
+#####################################################################
 def rotate_forward(q,theta):
     r"""
     Rotate state vector of conserved quantities
@@ -53,8 +56,10 @@ def rotate_forward(q,theta):
     Tq[2,:,:] = -s*q[1,:,:] + c*q[2,:,:]
     Tq[3,:,:] = q[3,:,:]
     return Tq
+    
 
-def rotate_backward(RTq,theta):
+
+def rotate_backward(q,theta):
     r"""
     Rotate state vector of characteristic variables
     RTq (meqn,i,j) backward by angle theta wrt x-axis (radians).
@@ -70,13 +75,31 @@ def rotate_backward(RTq,theta):
     """
     c = np.cos(theta)
     s = np.sin(theta)
-    q = np.zeros_like(RTq)
-    q[0,:,:] = RTq[0,:,:]
-    q[1,:,:] = c*RTq[1,:,:] - s*RTq[2,:,:]
-    q[2,:,:] = s*RTq[1,:,:] + c*RTq[2,:,:]
-    q[3,:,:] = RTq[3,:,:]
-    return q
+    Tinvq = np.zeros_like(q)
+    Tinvq[0,:,:] = q[0,:,:]
+    Tinvq[1,:,:] = c*q[1,:,:] - s*q[2,:,:]
+    Tinvq[2,:,:] = s*q[1,:,:] + c*q[2,:,:]
+    Tinvq[3,:,:] = q[3,:,:]
+    return Tinvq
 
+def rotate_backward_matrix(Rq,theta):
+    r"""
+    The same as rotate_backward but now Rq is (4,4,i,j)
+    """
+    c = np.cos(theta)
+    s = np.sin(theta)
+    q = np.zeros_like(Rq)
+    Tinv = np.zeros((4,4) + theta.shape)
+    Tinv[0,0,:,:] = 1
+    Tinv[1,1,:,:] = c
+    Tinv[1,2,:,:] = -s
+    Tinv[2,1,:,:] = s
+    Tinv[2,2,:,:] = c
+    Tinv[3,3,:,:] = 1
+    return np.einsum('ijlm,jklm->iklm', Tinv, Rq)
+#####################################################################
+# One-dimensional eigenstructure of the Euler equations
+#####################################################################
 def get_1d_R(q,gamma):
     r"""
     Get eigenvector matrices for the conserved variables q in 1D (x-direction).
@@ -156,7 +179,10 @@ def get_1d_Rinv(q,gamma):
     L[3,2,:,:] = -0.5*beta*v
     L[3,3,:,:] = 0.5*beta
     return L
-
+#####################################################################
+# Functions to compute the relaxation Gamma functions
+# and the sponge layer
+#####################################################################
 def points_on_line(theta, x0=None, y0=None):
     """
     Given an array of angles theta and either scalar x0 or scalar y0,
@@ -276,8 +302,10 @@ def get_slices_sponge_layer(arr,idx_limits):
     arr3 = arr[iL+1:iR,:jL+1]  #Bottom
     arr4 = arr[iL+1:iR,jU:]  #Top
     return arr1,arr2,arr3,arr4
-
-
+#####################################################################
+# Functions to be called once to setup the sponge layer
+# and store somewhere, perhaps in the state object
+#####################################################################
 def precompute_thetas(xp,yp,idx_limits):
     theta_global = get_theta(xp,yp)
     return get_slices_sponge_layer(theta_global,idx_limits)
@@ -345,12 +373,65 @@ def precompute_relaxation_functions(xp,yp,xlims,ylims):
     return get_slices_sponge_layer_general(rel_fun_global,get_sponge_idxs(xp,yp,xlims,ylims))
     # return rel_fun_global
 
-def distance_func(X,Y,x0,y0):
+def setup_RM(xp,yp,xlims,ylims):
     r"""
-    Compute the Euclidean distance from (x0,y0) to each point in (x,y).
-    x and y are 1D arrays.
+    Setup the sponge layer by precomputing thetas and relaxation functions.
+    xlims contains [xLL,xL,xR,xRR]
+    ylims contains [yLL,yL,yU,yUU]
+    The computational domain is [xL,xR]x[yL,yU].
+    The sponge layer is the disjoint union of O1,O2,O3,O4 where
+    O1 = [xLL,xL]x[yLL,yUU], O2 = [xR,xRR]x[yLL,yUU],
+    O3 = ]xL,xR[x[yLL,yL], O4 = ]xL,xR[x[yU,yUU].
+    This routine returns:
+    theta1,theta2,theta3,theta4
+    rel_fun1,rel_fun2,rel_fun3,rel_fun4
+    where theta1 is the angle array for O1, etc.
     """
-    return np.sqrt((X - x0)**2 + (Y - y0)**2)
+    print("Setting up RM-based ABCs...")
+    idx_limits = get_sponge_idxs(xp,yp,xlims,ylims)
+    print("Sponge layer indices (iL,iR,jL,jU):", idx_limits)
+    theta1,theta2,theta3,theta4 = precompute_thetas(xp,yp,idx_limits)
+    print("Got thetas.")
+    rel_fun1,rel_fun2,rel_fun3,rel_fun4 = precompute_relaxation_functions(xp,yp,xlims,ylims)
+    print("Got relaxation functions.")
+    points = np.array(np.meshgrid(xp, yp, indexing='ij'))
+    O1, O2, O3, O4 = get_slices_sponge_layer_general(points, idx_limits)
+    print(f"Ratio sponge layer sizes to total domain size: "
+          f"{np.sum(np.array([np.size(O) for O in [O1, O2, O3, O4]]))/np.size(points):.2f}"
+    )
+    return (idx_limits, (O1, O2, O3, O4),
+            (theta1,theta2,theta3,theta4), (rel_fun1,rel_fun2,rel_fun3,rel_fun4))
+#####################################################################
+# RM functions
+#####################################################################
+def apply_RM_slice(rel_fun,q,q_target):
+    r"""
+    Apply the relaxation method to a slice of the sponge layer.
+    q is (4,i,j), rel_fun is (i,j), q_target is (4)
+    """
+    q_out = np.zeros_like(q)
+    q_out = (1-rel_fun)*q_target[:,np.newaxis,np.newaxis] + rel_fun*q
+    return q_out
+
+def apply_RM(q,rel_funcs,q_target,idx_limits):
+    r"""
+    Apply the relaxation method to the sponge layer.
+    q is (4,mx,my), rel_fun1 is (iL+1,my), rel_fun2 is (mx-iR,my),
+    rel_fun3 is (iR-iL-1,jL+1), rel_fun4 is (iR-iL-1,my-jU).
+    q_target is (4)
+    """
+    rel_fun1,rel_fun2,rel_fun3,rel_fun4 = rel_funcs
+    iL,iR,jL,jU = idx_limits
+    qout = np.copy(q)
+    #Left
+    qout[:,:iL+1,:] = apply_RM_slice(rel_fun1,qout[:,:iL+1,:],q_target)
+    #Right
+    qout[:,iR:,:] = apply_RM_slice(rel_fun2,qout[:,iR:,:],q_target)
+    #Bottom
+    qout[:,iL+1:iR,:jL+1] = apply_RM_slice(rel_fun3,qout[:,iL+1:iR,:jL+1],q_target)
+    #Top
+    qout[:,iL+1:iR,jU:] = apply_RM_slice(rel_fun4,qout[:,iL+1:iR,jU:],q_target)
+    return qout
 
     
 
@@ -390,68 +471,37 @@ if __name__ == "__main__":
 
     ########################################################
     #Check sponge layer functions
-    xp = np.linspace(-6,6.,100)
-    yp = np.linspace(-6,6,100)
+    xp = np.linspace(-6,6.,300)
+    yp = np.linspace(-6,6,300)
     theta=get_theta(xp,yp)
 
-    xlims = [-6.0,-4.0,4.0,6.0]
-    ylims = [-6.0,-4.0,4.0,6.0]
-
-    # yi = points_on_line(theta,x0=-1.5)
-    # yf = points_on_line(theta,x0=-6.)
-
-    # xi = -1.5*np.ones_like(yi)
-    # xf = -6.*np.ones_like(yf)
+    xlims = [-6.0,-5.8,5.8,6.0]
+    ylims = [-6.0,-5.8,5.8,6.0]
 
     X,Y = np.meshgrid(xp,yp,indexing='ij')
     points = np.array([X,Y])
 
-    O1, O2, O3, O4 = get_slices_sponge_layer_general(points,get_sponge_idxs(xp,yp,xlims,ylims))
-    theta1, theta2, theta3, theta4 = get_slices_sponge_layer(theta,get_sponge_idxs(xp,yp,xlims,ylims))
-    rel_fun1, rel_fun2, rel_fun3, rel_fun4 = precompute_relaxation_functions(xp,yp,xlims,ylims)
+    (idx_limits, (O1, O2, O3, O4),
+    (theta1,theta2,theta3,theta4),
+    (rel_fun1,rel_fun2,rel_fun3,rel_fun4)) = setup_RM(xp,yp,xlims,ylims)
 
-
-    # relax_fun = distance_func(X,Y,xf,yf)/distance_func(xi,yi,xf,yf)
-    # relax_fun = distance_func(X,Y,0.0,0.0)
-
-    # Suppose theta1..theta4 are your data arrays
-    # rel_funcs = [rel_fun1, rel_fun2, rel_fun3, rel_fun4]
-
-    # # Global min/max
-    # vmin = min(np.nanmin(t) for t in rel_funcs)
-    # vmax = max(np.nanmax(t) for t in rel_funcs)
-    # print(vmin, vmax)
-
-    # # Plot each block with same vmin/vmax using pcolormesh (no interpolation)
-    # cs = plt.pcolormesh(O1[0], O1[1], rel_fun1, shading='nearest', vmin=vmin, vmax=vmax)
-    # plt.pcolormesh(O2[0], O2[1], rel_fun2, shading='nearest', vmin=vmin, vmax=vmax)
-    # plt.pcolormesh(O3[0], O3[1], rel_fun3, shading='nearest', vmin=vmin, vmax=vmax)
-    # plt.pcolormesh(O4[0], O4[1], rel_fun4, shading='nearest', vmin=vmin, vmax=vmax)
-
-    # plt.colorbar(cs)
-    # plt.show()
-
-    # Suppose theta1..theta4 are your data arrays
     rel_funcs = [rel_fun1, rel_fun2, rel_fun3, rel_fun4]
-    grids = [O1, O2, O3, O4]
 
-    # Global min/max for consistent colormap scaling
+    # Global min/max
     vmin = min(np.nanmin(t) for t in rel_funcs)
     vmax = max(np.nanmax(t) for t in rel_funcs)
-    print("vmin, vmax:", vmin, vmax)
+    print(vmin, vmax)
+    print(idx_limits)
 
-    # Plot each block as scatter
-    fig, ax = plt.subplots()
+    # Plot each block with same vmin/vmax using pcolormesh (no interpolation)
+    cs = plt.pcolormesh(O1[0], O1[1], rel_fun1, shading='nearest', vmin=vmin, vmax=vmax)
+    plt.pcolormesh(O2[0], O2[1], rel_fun2, shading='nearest', vmin=vmin, vmax=vmax)
+    plt.pcolormesh(O3[0], O3[1], rel_fun3, shading='nearest', vmin=vmin, vmax=vmax)
+    plt.pcolormesh(O4[0], O4[1], rel_fun4, shading='nearest', vmin=vmin, vmax=vmax)
 
-    for (O, rel_fun) in zip(grids, rel_funcs):
-        x = O[0].ravel()
-        y = O[1].ravel()
-        vals = rel_fun.ravel()
-        sc = ax.scatter(x, y, c=vals, cmap="viridis", vmin=vmin, vmax=vmax, s=20, marker="s")
-
-    # Add colorbar
-    plt.colorbar(sc, ax=ax)
+    plt.colorbar(cs)
     plt.show()
+    ########################################################
 
     
 
