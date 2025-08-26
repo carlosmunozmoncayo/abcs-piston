@@ -57,7 +57,21 @@ def rotate_forward(q,theta):
     Tq[3,:,:] = q[3,:,:]
     return Tq
     
-
+def rotate_forward_matrix_from_right(Lq,theta):
+    r"""
+    The same as rotate_forward but now Lq is (4,4,i,j)
+    and for each grid cell (i,j) we now want LqT
+    """
+    c = np.cos(theta)
+    s = np.sin(theta)
+    T = np.zeros((4,4) + theta.shape)
+    T[0,0,:,:] = 1
+    T[1,1,:,:] = c
+    T[1,2,:,:] = s
+    T[2,1,:,:] = -s
+    T[2,2,:,:] = c
+    T[3,3,:,:] = 1
+    return np.einsum('ijlm,jklm->iklm', Lq, T)
 
 def rotate_backward(q,theta):
     r"""
@@ -88,7 +102,6 @@ def rotate_backward_matrix(Rq,theta):
     """
     c = np.cos(theta)
     s = np.sin(theta)
-    q = np.zeros_like(Rq)
     Tinv = np.zeros((4,4) + theta.shape)
     Tinv[0,0,:,:] = 1
     Tinv[1,1,:,:] = c
@@ -179,6 +192,25 @@ def get_1d_Rinv(q,gamma):
     L[3,2,:,:] = -0.5*beta*v
     L[3,3,:,:] = 0.5*beta
     return L
+
+def get_1d_eigenvalues(q,gamma):
+    r"""
+    Get eigenvalues for the conserved variables q in 1D.
+    """
+    # Compute the eigenvalues
+    rho = q[0,:,:]
+    u = q[1,:,:] / rho
+    v = q[2,:,:] / rho
+    E = q[3,:,:]
+    p = (gamma - 1) * (E - 0.5 * rho * (u**2 + v**2))
+    c = np.sqrt(gamma * p / rho)
+
+    lambda1 = u - c
+    lambda2 = u
+    lambda3 = u
+    lambda4 = u + c
+    return np.array([lambda1, lambda2, lambda3, lambda4])
+
 #####################################################################
 # Functions to compute the relaxation Gamma functions
 # and the sponge layer
@@ -401,6 +433,7 @@ def setup_RM(xp,yp,xlims,ylims):
     )
     return (idx_limits, (O1, O2, O3, O4),
             (theta1,theta2,theta3,theta4), (rel_fun1,rel_fun2,rel_fun3,rel_fun4))
+
 #####################################################################
 # RM functions
 #####################################################################
@@ -432,10 +465,52 @@ def apply_RM(q,rel_funcs,q_target,idx_limits):
     #Top
     qout[:,iL+1:iR,jU:] = apply_RM_slice(rel_fun4,qout[:,iL+1:iR,jU:],q_target)
     return qout
+#####################################################################
+#RMM functions
+#####################################################################
+def apply_RMM_slice(q, rel_fun,theta, q_target, gamma):
+    r"""
+    Apply the relaxation method to a slice of the sponge layer.
+    Lq is (4,4,i,j), Rq is (4,4,i,j), rel_fun is (i,j), q_target is (4)
+    """
+    q_target = q_target[:,np.newaxis,np.newaxis]  #Make it (4,1,1)
+    #First get right and left eigenvector matrices in the theta direction
+    Tq = rotate_forward(q,theta)
+    R = rotate_backward_matrix(get_1d_R(Tq,gamma),theta) #Matrix of right eigenvectors
+    L = rotate_forward_matrix_from_right(get_1d_Rinv(Tq,gamma),theta) #Matrix of left eigenvectors
+    lambda_vals = get_1d_eigenvalues(Tq,gamma)  #Eigenvalues in theta direction
+    gamma_vals = np.ones_like(q)
+    for i in range(4):
+        gamma_vals[i,:,:] = np.where(lambda_vals[i,:,:]<0, 1.0, rel_fun)
+    #Now apply the RM update q_out = R Gamma L q + (I-R Gamma L) q_target = RGamma L(q - q_target) + q_target
+    q_out = np.einsum('ijkl,jkl->ikl', L, q - q_target)  #L(q-q_target)
+    q_out = gamma_vals * q_out  #Gamma L(q-q_target)
+    q_out = np.einsum('ijkl,jkl->ikl', R, q_out)  #R Gamma L(q-q_target)
+    q_out = q_out + q_target  #+ q_target
+    return q_out
 
-    
-
-
+def apply_RMM(q, rel_funcs, thetas, q_target, gamma, idx_limits):
+    r"""
+    Apply the relaxation method to the sponge layer.
+    q is (4,mx,my), rel_fun1 is (iL+1,my), rel_fun2 is (mx-iR,my),
+    rel_fun3 is (iR-iL-1,jL+1), rel_fun4 is (iR-iL-1,my-jU).
+    theta1 is (iL+1,my), theta2 is (mx-iR,my),
+    theta3 is (iR-iL-1,jL+1), theta4 is (iR-iL-1,my-jU).
+    q_target is (4)
+    """
+    rel_fun1,rel_fun2,rel_fun3,rel_fun4 = rel_funcs
+    theta1,theta2,theta3,theta4 = thetas
+    iL,iR,jL,jU = idx_limits
+    qout = np.copy(q)
+    #Left
+    qout[:,:iL+1,:] = apply_RMM_slice(qout[:,:iL+1,:],rel_fun1,theta1,q_target,gamma)
+    #Right
+    qout[:,iR:,:] = apply_RMM_slice(qout[:,iR:,:],rel_fun2,theta2,q_target,gamma)
+    #Bottom
+    qout[:,iL+1:iR,:jL+1] = apply_RMM_slice(qout[:,iL+1:iR,:jL+1],rel_fun3,theta3,q_target,gamma)
+    #Top
+    qout[:,iL+1:iR,jU:] = apply_RMM_slice(qout[:,iL+1:iR,jU:],rel_fun4,theta4,q_target,gamma)
+    return qout
 
 
 if __name__ == "__main__":

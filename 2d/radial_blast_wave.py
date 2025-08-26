@@ -109,6 +109,24 @@ def setup(use_petsc=False,riemann_solver='roe',tfinal=2.0):
     #####################################################################
     #Set RM-based ABCs 
     #####################################################################
+    # xvec = xx[:,0]; yvec = yy[0,:]
+    # (idx_lims, sponge_slices,
+    #   theta_slices, rel_funcs) = bcs_aux.setup_RM(xvec,yvec,[xvec[0],-1.8,1.8,xvec[-1]],
+    #                                               [yvec[0],-1.8,1.8,yvec[-1]])
+    # state.idx_lims = idx_lims
+    # state.sponge_slices = sponge_slices
+    # state.theta_slices = theta_slices
+    # state.rel_funcs = rel_funcs
+    # state.q_target = state.q[:,-1,-1].copy()  # Target state is state at the boundary at initial time
+    # def b4step_RM(solver,state):
+    #     r"""
+    #     Function to be called before each time step to apply RM ABCs.
+    #     """
+    #     state.q = bcs_aux.apply_RM(state.q,state.rel_funcs,state.q_target,state.idx_lims)
+    # solver.before_step = b4step_RM
+    #####################################################################
+    #####################################################################
+    #Set RM-M-based ABCs 
     xvec = xx[:,0]; yvec = yy[0,:]
     (idx_lims, sponge_slices,
       theta_slices, rel_funcs) = bcs_aux.setup_RM(xvec,yvec,[xvec[0],-1.8,1.8,xvec[-1]],
@@ -118,12 +136,14 @@ def setup(use_petsc=False,riemann_solver='roe',tfinal=2.0):
     state.theta_slices = theta_slices
     state.rel_funcs = rel_funcs
     state.q_target = state.q[:,-1,-1].copy()  # Target state is state at the boundary at initial time
-    def b4step_RM(solver,state):
+    def b4step_RMM(solver,state):
         r"""
         Function to be called before each time step to apply RM ABCs.
         """
-        state.q = bcs_aux.apply_RM(state.q,state.rel_funcs,state.q_target,state.idx_lims)
-    solver.before_step = b4step_RM
+        state.q = bcs_aux.apply_RMM(state.q,state.rel_funcs,state.theta_slices,state.q_target,gamma,state.idx_lims)
+    solver.before_step = b4step_RMM
+
+
     #####################################################################
 
 
