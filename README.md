@@ -1,6 +1,6 @@
 A Unified Framework for Sponge-Layer Relaxation Methods and Damping Operators for Conservation Laws: Application to the Piston Problem of Gas Dynamics
 ===========================================================================
-Reproducibility repository for the paper [A Unified Framework for Sponge-Layer Relaxation Methods and Damping Operators for Conservation Laws: Application to the Piston Problem of Gas Dynamics ]([https://www.codecademy.com](https://link.springer.com/article/10.1007/s10665-025-10504-0))
+Reproducibility repository for the paper [A Unified Framework for Sponge-Layer Relaxation Methods and Damping Operators for Conservation Laws: Application to the Piston Problem of Gas Dynamics](https://link.springer.com/article/10.1007/s10665-025-10504-0)
 ![image](https://github.com/carlosmunozmoncayo/abcs-piston/assets/29715468/afc55443-2cd1-4df8-8cbb-f07984e4abb2)
 ![image](https://github.com/carlosmunozmoncayo/abcs-piston/assets/29715468/df93afef-9752-4653-a76f-4275e2fc1c4c)
 
